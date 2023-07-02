@@ -2,4 +2,6 @@
 *.pickle
 *.csv
 *.png
+*.joblib
+*.pyc
 **/__pycache__/
