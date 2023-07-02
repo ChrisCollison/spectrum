@@ -1,0 +1,5 @@
+*.pb
+*.pickle
+*.csv
+*.png
+**/__pycache__/
