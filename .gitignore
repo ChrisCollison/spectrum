@@ -3,6 +3,9 @@
 *.pickle
 *.png
 *.joblib
+*.pkl
+*.parquet
+*.csv
 envs/
 
 

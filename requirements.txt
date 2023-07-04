@@ -1,6 +1,0 @@
-numpy
-matplotlib
-pandas
-mordred
-joblib
-rdkit
