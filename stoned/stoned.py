@@ -458,7 +458,7 @@ def mutate_selfie(selfie, max_molecules_len, alphabet, substructure_smarts, writ
     return selfie_mutated
 
 
-def get_mutated_SELFIES(selfies_ls, num_mutations, alphabet, substructure_smarts):
+def get_mutated_SELFIES(selfies_ls, num_mutations, alphabet, substructure_smarts: str = None):
     """Mutate all the SELFIES in 'selfies_ls' 'num_mutations' number of times.
 
     Parameters:
