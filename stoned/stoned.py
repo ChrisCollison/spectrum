@@ -208,7 +208,7 @@
 # 3. broke out fingerprint distance
 # 4. Added optional passed in alphabet
 
-print("This version of Stoned is running from ML/New_try/exmol/exmol/stoned.py")
+print("Stoned is running from the spectrum directory")
 import selfies  # type: ignore
 import random
 from rdkit import Chem  # type: ignore
