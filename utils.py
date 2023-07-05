@@ -5,6 +5,7 @@ from mordred import Calculator, descriptors
 from typing import Union, List, Tuple  # type: ignore
 from sklearn.model_selection import train_test_split
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 # Constant for the base data set column names
@@ -23,9 +24,37 @@ base_data_columns = [
 ]
 
 
+def plot_results(y, y_hat, title: str, r2_score: float, save: bool = True):
+    """
+    Plots the results of a model.
+
+    Params:
+    - `y` : array-like - The actual values.
+    - `y_hat` : array-like - The predicted values.
+    - `title` : str - The title of the plot.
+    - `save` : bool - Whether to save the plot as a png. Default is False.
+    """
+    #Create a figure and a set of subplots
+    _, ax = plt.subplots(figsize=(5, 4)) 
+    ax.plot(y, y_hat, ".")
+    ax.plot(y, y, linestyle=":")
+    ax.set_xlabel("Actual")
+    ax.set_ylabel("Predicted")
+    ax.set_title(title)
+
+    # Add the correlation of determination (R2) to the plot
+    ax.text(0.8, 0.1, f"R2: {r2_score:.2f}", transform=ax.transAxes)
+    
+    if save:
+        snake_case_title = title.replace(" ", "_")
+        file_path = f"models/plots/{snake_case_title}.png"
+        plt.savefig(file_path, dpi=300, bbox_inches="tight")
+    plt.show()
+
+
 def get_chromophore_train_test_data(
     filepath: Union[str, Path],
-    labels: List[str],
+    label: str,
     descriptors: Union[List[str], None] = None,
     n: Union[float, int] = 1.0,
     train_size: Union[float, int] = 0.8,
@@ -36,24 +65,24 @@ def get_chromophore_train_test_data(
 
     Params:
     - `filepath` : str or pathlib.Path - Path to the file containing the data if not already generated then it will be generated from the base data set using `get_data()` and saved in the `data` directory.
-    - `labels` : list - List of labels to be used for the data. For example, `["LambdaMaxAbs", "LambdaMaxEm"]`.
+    - `label` : str - the target chromophore output label to be used. For example, `"LambdaMaxAbs"`.
     - `n` : float or int - Fraction of the base data set to be used to generate the data. Default is 1.0 - i.e. all of the data. If `n` is an integer, it will be used as the number of rows to sample.
     - `train_size` : float or int - Fraction of the data to be used for training. Default is 0.8. If `train` is an integer, it will be used as the number of rows to sample.
 
     Returns:
     - `X_train` : pandas dataframe - Training data
     - `X_test` : pandas dataframe - Testing data
-    - `y_train` : pandas dataframe - Training labels
-    - `y_test` : pandas dataframe - Testing labels
+    - `y_train` : pandas data series - Training labels
+    - `y_test` : pandas data series - Testing labels
     """
 
     # Get data
     data = get_chromophore_data(filepath, frac=1.0, seed=random_state)
 
-    # Check all requested labels are in the data
-    if not all([label in data.columns for label in labels]):
+    # Check label is one of the base data columns
+    if not label in base_data_columns:
         raise ValueError(
-            f"Not all requested labels are in the data. Requested labels: {labels}. Data labels: {data.columns}"
+            f"Label must be one of the base data columns: {base_data_columns}"
         )
 
     # Check all requested descriptors are in the data if descriptors are provided
@@ -67,17 +96,18 @@ def get_chromophore_train_test_data(
     else:
         feature_names = [col for col in data.columns if col not in base_data_columns]
 
-    # Filter out any rows in the data that have NaN values for the labels
-    data = data.dropna(subset=labels, axis=0, how="any").reset_index(drop=True)
+    # Filter out any rows in the data that have NaN values for the label
+    data = data.dropna(subset=[label], axis=0, how="any")
 
     # Get sample parameters
     sample_frac = n if isinstance(n, float) else None
     sample_n = n if isinstance(n, int) else None
 
     # Get data
-    y_data = data[labels].sample(
+    y_data = data[label].sample(
         n=sample_n, frac=sample_frac, random_state=random_state
     )
+    
 
     x_data = data[feature_names].sample(
         n=sample_n, frac=sample_frac, random_state=random_state

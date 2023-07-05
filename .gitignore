@@ -1,11 +1,10 @@
 # Project specific ignores
 *.pb
 *.pickle
-*.png
-*.joblib
 *.pkl
 *.parquet
 *.csv
+*.joblib
 envs/
 
 
