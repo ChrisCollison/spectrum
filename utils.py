@@ -2,14 +2,99 @@ import pandas as pd
 from pathlib import Path  # type: ignore
 from rdkit import Chem
 from mordred import Calculator, descriptors
-from typing import Union, List, Tuple # type: ignore
+from typing import Union, List, Tuple  # type: ignore
+from sklearn.model_selection import train_test_split
 import numpy as np
 
 
-def get_data(filename: Union[str, Path], frac=0.8, seed=42) -> pd.DataFrame:
+# Constant for the base data set column names
+base_data_columns = [
+    "SMILES",
+    "LambdaMaxAbs",
+    "LambdaMaxEm",
+    "Lifetime",
+    "QY",
+    "LogExtCoeff",
+    "AbsFWHMcm-1",
+    "EmFWHMcm-1",
+    "AbsFWHMnm",
+    "EmFWHMnm",
+    "MolarMass",
+]
+
+
+def get_chromophore_train_test_data(
+    filepath: Union[str, Path],
+    labels: List[str],
+    descriptors: Union[List[str], None] = None,
+    n: Union[float, int] = 1.0,
+    train_size: Union[float, int] = 0.8,
+    random_state: int = 42,
+):
+    """
+    Used to get the data for the model. In which the "labels" are the base data chromophore properties to be predicted, and the "features" are the Mordred descriptors.
+
+    Params:
+    - `filepath` : str or pathlib.Path - Path to the file containing the data if not already generated then it will be generated from the base data set using `get_data()` and saved in the `data` directory.
+    - `labels` : list - List of labels to be used for the data. For example, `["LambdaMaxAbs", "LambdaMaxEm"]`.
+    - `n` : float or int - Fraction of the base data set to be used to generate the data. Default is 1.0 - i.e. all of the data. If `n` is an integer, it will be used as the number of rows to sample.
+    - `train_size` : float or int - Fraction of the data to be used for training. Default is 0.8. If `train` is an integer, it will be used as the number of rows to sample.
+
+    Returns:
+    - `X_train` : pandas dataframe - Training data
+    - `X_test` : pandas dataframe - Testing data
+    - `y_train` : pandas dataframe - Training labels
+    - `y_test` : pandas dataframe - Testing labels
+    """
+
+    # Get data
+    data = get_chromophore_data(filepath, frac=1.0, seed=random_state)
+
+    # Check all requested labels are in the data
+    if not all([label in data.columns for label in labels]):
+        raise ValueError(
+            f"Not all requested labels are in the data. Requested labels: {labels}. Data labels: {data.columns}"
+        )
+
+    # Check all requested descriptors are in the data if descriptors are provided
+    feature_names = None
+    if descriptors is not None:
+        if not all([descriptor in data.columns for descriptor in descriptors]):
+            raise ValueError(
+                f"Not all requested descriptors are in the data. Requested descriptors: {descriptors}. Data descriptors: {data.columns}"
+            )
+        feature_names = descriptors
+    else:
+        feature_names = [col for col in data.columns if col not in base_data_columns]
+
+    # Filter out any rows in the data that have NaN values for the labels
+    data = data.dropna(subset=labels, axis=0, how="any").reset_index(drop=True)
+
+    # Get sample parameters
+    sample_frac = n if isinstance(n, float) else None
+    sample_n = n if isinstance(n, int) else None
+
+    # Get data
+    y_data = data[labels].sample(
+        n=sample_n, frac=sample_frac, random_state=random_state
+    )
+
+    x_data = data[feature_names].sample(
+        n=sample_n, frac=sample_frac, random_state=random_state
+    )
+
+    # Split data
+    X_train, X_test, y_train, y_test = train_test_split(
+        x_data, y_data, train_size=train_size, random_state=random_state, shuffle=True
+    )
+
+    return X_train, X_test, y_train, y_test
+
+
+def get_chromophore_data(filename: Union[str, Path], frac=0.8, seed=42) -> pd.DataFrame:
     """
     Returns a pandas dataframe of the provided filename.
-    
+
     If the file does not exist, it will be generated from the base data set authored by [Joonyoung Francis Joung, Minhi Han, Minseok Jeong, Sungnam Park](https://figshare.com/articles/dataset/DB_for_chromophore/12045567/2) with the features calculated based on the SMILES representation for all available Mordred molecule descriptors. The list of descriptors can be found [here](https://mordred-descriptor.github.io/documentation/master/descriptors.html). This can take a long time to run depending on `frac` requested. The generated file will be saved in the `data` directory.
 
     - `filename` : str or pathlib.Path - Name of the file to be loaded. If the file does not exist, it will be generated from the base data set. The generated file will be saved in the `data` directory.
@@ -19,7 +104,7 @@ def get_data(filename: Union[str, Path], frac=0.8, seed=42) -> pd.DataFrame:
     - `seed` : int - Seed to be used for the random number generator in sampling the base data if the file cannot be loaded. Default is 42.
     """
     if isinstance(filename, str):
-        filename = Path.cwd() / 'data' / filename
+        filename = Path.cwd() / "data" / filename
 
     try:
         if filename.suffix == ".csv":
@@ -37,6 +122,7 @@ def get_data(filename: Union[str, Path], frac=0.8, seed=42) -> pd.DataFrame:
         else:
             data.to_parquet(filename)
     return data
+
 
 def create_data(frac=0.8, seed=42) -> pd.DataFrame:
     """
@@ -92,38 +178,29 @@ def get_mordred_values(data: pd.DataFrame) -> pd.DataFrame:
     - `data` : pandas dataframe - Dataframe containing the Chromophore data with the smiles representation of a molecule as an index - e.g. as generated by `gen_chromophore_data()`
     """
 
-    # Add temporary Mol column
-    data["Mol"] = [True] * data.shape[0]
-
     # Convert smiles to RDKit molecules
     molecules = []
     for i, smile in enumerate(data["SMILES"]):
-        canon_smile = Chem.CanonSmiles(smile) 
+        canon_smile = Chem.CanonSmiles(smile)
         data.at[i, "SMILES"] = canon_smile
         mol = Chem.MolFromSmiles(canon_smile, sanitize=True)  # type: ignore
-        if mol is not None:
-            molecules.append(mol)
-        else:
-            data.at[i, "Mol"] = False
-            print(f"Failed to convert row {i}: {smile} to RDKit molecule")
-
-    # Remove molecules that failed to be converted to RDKit molecules
-    data = data.drop(data[data["Mol"] == False].index)
-    
-    # Remove the temporary Mol column
-    data = data.drop("Mol", axis=1)
+        molecules.append(mol)
 
     # Calculate Mordred descriptors
     mordred_calc = Calculator(descriptors, ignore_3D=True)
 
     # Create dataframe of Mordred calculated descriptors values
-    print(f"Calculating {len(mordred_calc.descriptors)} Mordred descriptors for each row...\n")
+    print(
+        f"Calculating {len(mordred_calc.descriptors)} Mordred descriptors for each row...\n"
+    )
     mordred_data = mordred_calc.pandas(mols=molecules)
 
     return mordred_data
 
 
-def combine_data(data: pd.DataFrame, features: pd.DataFrame, missing_rows: pd.Index) -> pd.DataFrame:
+def combine_data(
+    data: pd.DataFrame, features: pd.DataFrame, missing_rows: pd.Index
+) -> pd.DataFrame:
     """
     Combines the provided dataframes as follows:
     - Drops rows where all the values are missing from the `data` dataframe and store the index of these rows
@@ -171,19 +248,7 @@ def gen_chromophore_data(frac=0.8, seed=42):
     data = data.drop(["Solvent", "Reference", "Tag"], axis=1)
 
     # Rename columns
-    data.columns = [
-        "SMILES",
-        "LambdaMaxAbs",
-        "LambdaMaxEm",
-        "Lifetime",
-        "QY",
-        "LogExtCoeff",
-        "AbsFWHMcm-1",
-        "EmFWHMcm-1",
-        "AbsFWHMnm",
-        "EmFWHMnm",
-        "MolarMass",
-    ]
+    data.columns = base_data_columns
 
     # Take a random sample of the data
     print(f"Taking a random sample of {round(frac * len(data))} rows...\n")

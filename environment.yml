@@ -1,4 +1,4 @@
-name: envs
+name: mordredenv
 channels:
   - defaults
   - conda-forge
@@ -10,6 +10,7 @@ dependencies:
   - networkx==2.2
   - matplotlib >=3.6.0, <3.7
   - ipywidgets==7.5.1
+  - conda-forge::scikit-learn
   - joblib
   - rdkit
   - ipykernel
