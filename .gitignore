@@ -6,6 +6,7 @@
 *.csv
 *.joblib
 envs/
+**/.DS_Store
 
 
 # Standard ignores (extracted from https://github.com/github/gitignore/blob/main/Python.gitignore)
