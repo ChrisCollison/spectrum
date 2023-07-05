@@ -13,6 +13,5 @@ dependencies:
   - conda-forge::scikit-learn
   - joblib
   - rdkit
-  - ipykernel
   - selfies
   - pyarrow
