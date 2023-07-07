@@ -6,6 +6,7 @@
 *.csv
 *.joblib
 envs/
+rdkitenv/
 **/.DS_Store
 
 

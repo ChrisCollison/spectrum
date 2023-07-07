@@ -3,7 +3,6 @@ from pathlib import Path  # type: ignore
 from rdkit import Chem
 from mordred import Calculator, descriptors
 from typing import Union, List, Tuple  # type: ignore
-from sklearn.model_selection import train_test_split
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -24,6 +23,104 @@ base_data_columns = [
 ]
 
 
+def trim_outliers(
+    X_data: pd.DataFrame,
+    y_data: pd.Series,
+    trim_quantile: Union[float, None] = None,
+    min_max_values: Union[Tuple[float, float], None] = None,
+) -> Tuple[pd.DataFrame, pd.Series]:
+    """
+    Trims outliers from y_data and matched index in X_data.
+
+    Params:
+    - `X_data` - pd.DataFrame -  features
+    - `y_data` - pd.Series - target values
+    - `trim_quantile` - Union[float, None] - Quantile to trim from both ends of y_data. If None, min_max_values must be specified.
+    - `min_max_values` - Union[Tuple[float, float], None] - Tuple of (min_value, max_value) to trim from y_data. If None, trim_quantile must be specified.
+
+    Returns:
+    - `X_trimmed` - pd.DataFrame - features with outliers removed
+    - `y_trimmed` - pd.Series - target variable with outliers removed
+    """
+    if trim_quantile is None and min_max_values is None:
+        raise ValueError("Either trim_quantile or min_max_values must be specified.")
+    if trim_quantile is not None and min_max_values is not None:
+        raise ValueError(
+            "Only one of trim_quantile or min_max_values can be specified."
+        )
+    if min_max_values is not None:
+        min_value, max_value = min_max_values
+    else:
+        min_value = y_data.quantile(trim_quantile)  # type: ignore
+        max_value = y_data.quantile(1.0 - trim_quantile)  # type: ignore
+
+    y_trimmed = y_data[(y_data >= min_value) & (y_data <= max_value)]
+    X_trimmed = X_data.loc[y_trimmed.index]
+    return X_trimmed, y_trimmed
+
+
+def get_target_data(
+    data_path: Union[str, Path],
+    target: str,
+    mordred_descriptors: Union[List[str], None] = None,
+    frac: float = 1.0,
+    random_state: int = 42,
+) -> Tuple[pd.DataFrame, pd.Series]:
+    """
+    Used to get the data for the model. In which the "target" is the base data chromophore properties to be predicted, and the "features" are the Mordred descriptors.
+
+    Params:
+    - `filepath` : str or pathlib.Path - Path to the file containing the data if not already generated then it will be generated from the base data set using `get_data()` and saved in the `data` directory.
+    - `target` : str - the target chromophore output label to be used. For example, `"LambdaMaxAbs"`.
+    - `mordred_descriptors` : list of str - The Mordred descriptors to be used as features. If None, all descriptors will be used. Default is None.
+    - `frac` : float  - Fraction of the base data set to be used to generate the data.  Default is 1.0.
+    - 'random_state' : int - Random state for reproducibility. Default is 42.
+
+    Returns:
+    - `X` : pandas dataframe - Training data
+    - `y` : pandas data series - Training labels
+    """
+
+    # Get data
+    data = get_chromophore_data(data_path, frac=frac, seed=random_state)
+
+    # Check label is one of the base data columns
+    if not target in base_data_columns:
+        raise ValueError(
+            f"Label must be one of the base data columns: {base_data_columns}"
+        )
+
+    # Check all requested descriptors are in the data if descriptors are provided
+    feature_names = None
+    if mordred_descriptors is not None:
+        if not all([descriptor in data.columns
+                    for descriptor in mordred_descriptors]):
+            raise ValueError(
+                f"Not all requested descriptors are in the data. Requested descriptors: {descriptors}. Data descriptors: {data.columns}"
+            )
+        feature_names = descriptors
+    else:
+        feature_names = [col for col in data.columns if col not in base_data_columns]
+
+    # Filter out any rows in the data that have NaN values for the label
+    data = data.dropna(subset=[target], axis=0, how="any")
+
+    # Get sample parameters
+    sample_frac = frac if isinstance(frac, float) else None
+    sample_n = frac if isinstance(frac, int) else None
+
+    # Get data
+    y_data = data[target].sample(
+        n=sample_n, frac=sample_frac, random_state=random_state
+    )
+
+    x_data = data[feature_names].sample(
+        n=sample_n, frac=sample_frac, random_state=random_state
+    )
+
+    return x_data, y_data  # type: ignore
+
+
 def plot_results(y, y_hat, title: str, r2_score: float, save: bool = True):
     """
     Plots the results of a model.
@@ -34,8 +131,8 @@ def plot_results(y, y_hat, title: str, r2_score: float, save: bool = True):
     - `title` : str - The title of the plot.
     - `save` : bool - Whether to save the plot as a png. Default is False.
     """
-    #Create a figure and a set of subplots
-    _, ax = plt.subplots(figsize=(5, 4)) 
+    # Create a figure and a set of subplots
+    _, ax = plt.subplots(figsize=(5, 4))
     ax.plot(y, y_hat, ".")
     ax.plot(y, y, linestyle=":")
     ax.set_xlabel("Actual")
@@ -44,7 +141,7 @@ def plot_results(y, y_hat, title: str, r2_score: float, save: bool = True):
 
     # Add the correlation of determination (R2) to the plot
     ax.text(0.8, 0.1, f"R2: {r2_score:.2f}", transform=ax.transAxes)
-    
+
     if save:
         snake_case_title = title.replace(" ", "_")
         file_path = f"models/plots/{snake_case_title}.png"
@@ -52,76 +149,7 @@ def plot_results(y, y_hat, title: str, r2_score: float, save: bool = True):
     plt.show()
 
 
-def get_chromophore_train_test_data(
-    filepath: Union[str, Path],
-    label: str,
-    descriptors: Union[List[str], None] = None,
-    n: Union[float, int] = 1.0,
-    train_size: Union[float, int] = 0.8,
-    random_state: int = 42,
-):
-    """
-    Used to get the data for the model. In which the "labels" are the base data chromophore properties to be predicted, and the "features" are the Mordred descriptors.
-
-    Params:
-    - `filepath` : str or pathlib.Path - Path to the file containing the data if not already generated then it will be generated from the base data set using `get_data()` and saved in the `data` directory.
-    - `label` : str - the target chromophore output label to be used. For example, `"LambdaMaxAbs"`.
-    - `n` : float or int - Fraction of the base data set to be used to generate the data. Default is 1.0 - i.e. all of the data. If `n` is an integer, it will be used as the number of rows to sample.
-    - `train_size` : float or int - Fraction of the data to be used for training. Default is 0.8. If `train` is an integer, it will be used as the number of rows to sample.
-
-    Returns:
-    - `X_train` : pandas dataframe - Training data
-    - `X_test` : pandas dataframe - Testing data
-    - `y_train` : pandas data series - Training labels
-    - `y_test` : pandas data series - Testing labels
-    """
-
-    # Get data
-    data = get_chromophore_data(filepath, frac=1.0, seed=random_state)
-
-    # Check label is one of the base data columns
-    if not label in base_data_columns:
-        raise ValueError(
-            f"Label must be one of the base data columns: {base_data_columns}"
-        )
-
-    # Check all requested descriptors are in the data if descriptors are provided
-    feature_names = None
-    if descriptors is not None:
-        if not all([descriptor in data.columns for descriptor in descriptors]):
-            raise ValueError(
-                f"Not all requested descriptors are in the data. Requested descriptors: {descriptors}. Data descriptors: {data.columns}"
-            )
-        feature_names = descriptors
-    else:
-        feature_names = [col for col in data.columns if col not in base_data_columns]
-
-    # Filter out any rows in the data that have NaN values for the label
-    data = data.dropna(subset=[label], axis=0, how="any")
-
-    # Get sample parameters
-    sample_frac = n if isinstance(n, float) else None
-    sample_n = n if isinstance(n, int) else None
-
-    # Get data
-    y_data = data[label].sample(
-        n=sample_n, frac=sample_frac, random_state=random_state
-    )
-    
-
-    x_data = data[feature_names].sample(
-        n=sample_n, frac=sample_frac, random_state=random_state
-    )
-
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(
-        x_data, y_data, train_size=train_size, random_state=random_state, shuffle=True
-    )
-
-    return X_train, X_test, y_train, y_test
-
-
-def get_chromophore_data(filename: Union[str, Path], frac=0.8, seed=42) -> pd.DataFrame:
+def get_chromophore_data(filename: Union[str, Path], frac=1.0, seed=42) -> pd.DataFrame:
     """
     Returns a pandas dataframe of the provided filename.
 
@@ -246,7 +274,7 @@ def combine_data(
     return pd.concat([data, features], axis=1)
 
 
-def gen_chromophore_data(frac=0.8, seed=42):
+def gen_chromophore_data(frac=1.0, seed=42):
     """
     Generate a pandas dataframe of index(smiles molecules) and their features based on the data set authored by  [Joonyoung Francis Joung, Minhi Han, Minseok Jeong, Sungnam Park](https://figshare.com/articles/dataset/DB_for_chromophore/12045567/2).
 

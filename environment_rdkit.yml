@@ -1,0 +1,16 @@
+name: rdkitenv
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - conda-forge::numpy
+  - conda-forge::pandas
+  - conda-forge::scikit-learn
+  - conda-forge::rdkit
+  - conda-forge::matplotlib
+  - ipywidgets
+  - joblib
+  - pyarrow
+  - selfies
+
