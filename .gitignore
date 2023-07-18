@@ -5,9 +5,12 @@
 *.parquet
 *.csv
 *.joblib
+*.keras
+*.h5
 envs/
 rdkitenv/
 **/.DS_Store
+venv-metal/
 
 
 # Standard ignores (extracted from https://github.com/github/gitignore/blob/main/Python.gitignore)

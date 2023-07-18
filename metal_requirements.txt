@@ -1,0 +1,8 @@
+tensorflow
+tensorflow-metal
+rdkit
+pandas
+matplotlib
+selfies
+pyarrow
+scikit-learn
