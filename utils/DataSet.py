@@ -319,3 +319,18 @@ class DataSet:
         descriptors = [get_Mol_Descriptors(mol) for mol in mols]
         print("Writing parquet file rdkit_desciptor_values.parquet to data folder...\n")
         pd.DataFrame(descriptors).to_parquet("data/rdkit_descriptor_values.parquet")
+
+
+    @classmethod
+    def save_used_features (df, file_name):
+        """Save the list of used features to a file.
+
+        Parameters:
+        - `df` - pandas.DataFrame - The DataFrame containing the features.
+        - `file_name` - str - The name of the file to save the features to.
+        """
+        used_features = list(df.columns)
+        with open(f"{file_name}.txt", 'w') as f:
+            for item in used_features:
+                f.write("%s\n" % item)
+        return
