@@ -1,9 +1,8 @@
 import os
 import urllib.request
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 
 import pandas as pd
-import matplotlib.pyplot as plt
 from rdkit import Chem
 import selfies as sf
 from sklearn.model_selection import train_test_split
@@ -65,12 +64,14 @@ class DataSet:
 
         self.generate_datafiles()
 
-        self.y, self.X = self.get_data_for_target(target, fill_na, drop_na_selfies, descriptors)
+        self.y, self.X = self.get_data_for_target(
+            target, fill_na, drop_na_selfies, descriptors
+        )
 
         if drop_features is not None:
             self.X.drop(drop_features, axis=1, inplace=True)
 
-        self.descriptor_names = self.X.columns
+        self.descriptor_names = self.X.columns.to_list()
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             self.X, self.y, test_size=test_ratio, random_state=random_state
         )
@@ -87,7 +88,7 @@ class DataSet:
             self.X.drop(features, axis=1, inplace=True)
             self.X_train.drop(features, axis=1, inplace=True)
             self.X_test.drop(features, axis=1, inplace=True)
-            self.descriptor_names = self.X.columns
+            self.descriptor_names = self.X.columns.to_list()
             return self
         else:
             return DataSet(
@@ -99,7 +100,7 @@ class DataSet:
                 self.random_state,
                 drop_features=features,
             )
-    
+
     # Class constants
     target_names = [
         "LambdaMaxAbs",
@@ -121,7 +122,7 @@ class DataSet:
         target,
         replace_na_value: Union[None, float, str] = None,
         drop_na_selfies: bool = True,
-        descriptors: str = "all"
+        descriptors: str = "all",
     ) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Load the data for the given target variable.
@@ -149,7 +150,7 @@ class DataSet:
             raise ValueError(
                 f"Invalid target variable {target}. Must be one of {cls.target_names}"
             )
-        
+
         if descriptors not in ["all", "discrete", "continuous"]:
             raise ValueError(
                 f"Invalid descriptors {descriptors}. Must be one of ['all', 'discrete', 'continuous']"
@@ -161,7 +162,7 @@ class DataSet:
 
         # Drop any rows with missing target values
         valid_target_indices = chromophore_data[target].notnull()
-        
+
         # Optionally Drop any rows with missing SELFIES
         if drop_na_selfies:
             valid_target_indices = (
@@ -175,7 +176,7 @@ class DataSet:
         elif descriptors == "continuous":
             continuous_columns = descriptor_data.select_dtypes(include="float").columns
             descriptor_data = descriptor_data[continuous_columns]
-        
+
         chromophore_data = chromophore_data[valid_target_indices]
         descriptor_data = descriptor_data[valid_target_indices]
         target_data = chromophore_data[["SMILES", "SELFIES", target]]
@@ -320,17 +321,15 @@ class DataSet:
         print("Writing parquet file rdkit_desciptor_values.parquet to data folder...\n")
         pd.DataFrame(descriptors).to_parquet("data/rdkit_descriptor_values.parquet")
 
-
-    @classmethod
-    def save_used_features (df, file_name):
-        """Save the list of used features to a file.
+    def save_used_features(self, file_name):
+        """Save the list of features used in the dataset to a file.
 
         Parameters:
         - `df` - pandas.DataFrame - The DataFrame containing the features.
         - `file_name` - str - The name of the file to save the features to.
         """
-        used_features = list(df.columns)
-        with open(f"{file_name}.txt", 'w') as f:
+        used_features = list(self.X.columns)
+        with open(f"{file_name}.txt", "w") as f:
             for item in used_features:
-                f.write("%s\n" % item)
-        return
+                f.write(f"{item}\n")
+            print(f"Saved used features to {file_name}.txt")
